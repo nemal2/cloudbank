@@ -39,10 +39,11 @@ export default function Dashboard() {
     const load = async () => {
       try {
         const { data: accs } = await accountApi.list()
-        setAccounts(accs)
+        const accounts = Array.isArray(accs) ? accs : (accs?.content ?? [])
+        setAccounts(accounts)
 
-        if (accs.length > 0) {
-          const { data: txnPage } = await transactionApi.history(accs[0].id)
+        if (accounts.length > 0) {
+          const { data: txnPage } = await transactionApi.history(accounts[0].id)
           const txns = txnPage.content || []
           setRecentTxns(txns.slice(0, 5))
 

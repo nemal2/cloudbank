@@ -13,7 +13,9 @@ export default function AccountsPage() {
 
   const load = () => {
     setLoading(true)
-    accountApi.list().then(({ data }) => setAccounts(data)).finally(() => setLoading(false))
+    accountApi.list().then(({ data }) => {
+  setAccounts(Array.isArray(data) ? data : (data?.content ?? []))
+}).finally(() => setLoading(false))
   }
 
   useEffect(load, [])
