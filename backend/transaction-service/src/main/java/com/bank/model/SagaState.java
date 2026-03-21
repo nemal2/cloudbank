@@ -21,6 +21,7 @@ public class SagaState {
     private String sagaType;
 
     @Column(columnDefinition = "jsonb", nullable = false)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private String payload;
 
     @Enumerated(EnumType.STRING)
