@@ -1,0 +1,205 @@
+
+
+services:
+  # ─── Infrastructure ───────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: bank-postgres
+    environment:
+      POSTGRES_DB: bankdb
+      POSTGRES_USER: bankuser
+      POSTGRES_PASSWORD: bankpass
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bankuser -d bankdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bank-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass redispass
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispass", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: bank-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: bank-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: bank-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
+  minio:
+    image: minio/minio:latest
+    container_name: bank-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  # ─── Backend Services ─────────────────────────────────────────────
+  auth-service:
+    build: ./backend/auth-service
+    container_name: bank-auth
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  account-service:
+    build: ./backend/account-service
+    container_name: bank-account
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      AWS_S3_BUCKET: bank-profiles
+      AWS_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY: minioadmin
+      AWS_SECRET_KEY: minioadmin
+      JWT_SECRET: ${JWT_SECRET:-cloudbank-ruhuna-ec7205-super-secret-key-2025-batch23}
+
+  transaction-service:
+    build: ./backend/transaction-service
+    container_name: bank-transaction
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      JWT_SECRET: ${JWT_SECRET:-cloudbank-ruhuna-ec7205-super-secret-key-2025-batch23}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  notification-service:
+    build: ./backend/notification-service
+    container_name: bank-notification
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM: noreply@bank.com
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ─── API Gateway (Nginx) ──────────────────────────────────────────
+  api-gateway:
+    image: nginx:alpine
+    container_name: bank-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - account-service
+      - transaction-service
+      - notification-service
+
+  # ─── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: bank-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:80
+      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+
+  # ─── Monitoring ───────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bank-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bank-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  minio_data:
+  grafana_data:

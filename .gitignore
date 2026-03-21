@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+*.env.local
+
+# Java
+target/
+*.jar
+*.class
+.mvn/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Docker volumes
+postgres_data/
+minio_data/
+grafana_data/
+
+# Logs
+*.log
+logs/

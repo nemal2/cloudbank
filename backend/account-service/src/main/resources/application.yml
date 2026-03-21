@@ -1,0 +1,52 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: account-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bankdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bankuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:bankpass}
+    hikari:
+      maximum-pool-size: 8
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:redispass}
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:bank-profiles}
+  endpoint: ${AWS_ENDPOINT:}          # blank = real AWS, set to http://minio:9000 for local
+  access-key: ${AWS_ACCESS_KEY:}
+  secret-key: ${AWS_SECRET_KEY:}
+  region: ${AWS_REGION:us-east-1}
+
+jwt:
+  secret: ${JWT_SECRET:supersecretjwtkey2024bankingsystem}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    com.bank: DEBUG

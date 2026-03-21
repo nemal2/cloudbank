@@ -1,0 +1,40 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bankdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bankuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:bankpass}
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:redispass}
+
+jwt:
+  secret: ${JWT_SECRET:supersecretjwtkey2024bankingsystem}
+  expiration: 86400000
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID:your-google-client-id.apps.googleusercontent.com}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
