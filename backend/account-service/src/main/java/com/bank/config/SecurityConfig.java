@@ -33,13 +33,14 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
 
-    @Bean
+  @Bean
 public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     return http
         .csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
-            .anyRequest().permitAll()
+            .requestMatchers("/actuator/**").permitAll()
+            .anyRequest().permitAll()    // ← must be permitAll not authenticated
         )
         .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
         .build();
