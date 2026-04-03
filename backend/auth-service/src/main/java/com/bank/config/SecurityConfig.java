@@ -61,30 +61,38 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         private final UserRepository userRepository;
 
         @Override
-        protected void doFilterInternal(HttpServletRequest req,
-                                        HttpServletResponse res,
-                                        FilterChain chain) throws ServletException, IOException {
-            String header = req.getHeader("Authorization");
-            if (header == null || !header.startsWith("Bearer ")) {
-                chain.doFilter(req, res);
-                return;
-            }
+protected void doFilterInternal(HttpServletRequest req,
+                               HttpServletResponse res,
+                               FilterChain chain) throws ServletException, IOException {
 
-            String token = header.substring(7);
-            try {
-                if (!authService.isTokenBlacklisted(token) && jwtService.isValid(token)) {
-                    String userId = jwtService.extractUserId(token);
-                    User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
-                    if (user != null && user.isEnabled()) {
-                        var auth = new UsernamePasswordAuthenticationToken(
-                            user, null, user.getAuthorities());
-                        SecurityContextHolder.getContext().setAuthentication(auth);
-                    }
-                }
-            } catch (Exception e) {
-                log.debug("JWT filter error: {}", e.getMessage());
+    // 🔥 SKIP actuator endpoints
+    if (req.getRequestURI().startsWith("/actuator")) {
+        chain.doFilter(req, res);
+        return;
+    }
+
+    String header = req.getHeader("Authorization");
+    if (header == null || !header.startsWith("Bearer ")) {
+        chain.doFilter(req, res);
+        return;
+    }
+
+    String token = header.substring(7);
+    try {
+        if (!authService.isTokenBlacklisted(token) && jwtService.isValid(token)) {
+            String userId = jwtService.extractUserId(token);
+            User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
+            if (user != null && user.isEnabled()) {
+                var auth = new UsernamePasswordAuthenticationToken(
+                    user, null, user.getAuthorities());
+                SecurityContextHolder.getContext().setAuthentication(auth);
             }
-            chain.doFilter(req, res);
         }
+    } catch (Exception e) {
+        log.debug("JWT filter error: {}", e.getMessage());
+    }
+
+    chain.doFilter(req, res);
+}
     }
 }
