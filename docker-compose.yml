@@ -2,7 +2,7 @@ services:
   # ─── Infrastructure ───────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
-    container_name: bank-postgres
+    
     environment:
       POSTGRES_DB: bankdb
       POSTGRES_USER: bankuser
@@ -51,14 +51,14 @@ services:
 
   mailhog:
     image: mailhog/mailhog:latest
-    container_name: bank-mailhog
+    
     ports:
       - "1025:1025"
       - "8025:8025"
 
   minio:
     image: minio/minio:latest
-    container_name: bank-minio
+    
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -72,7 +72,7 @@ services:
   # ─── Backend Services ─────────────────────────────────────────────
   auth-service:
     build: ./backend/auth-service
-    container_name: bank-auth
+    
     ports:
       - "8081:8081"
     environment:
@@ -147,7 +147,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: bank-frontend
+    
     ports:
       - "3000:3000"
     environment:
