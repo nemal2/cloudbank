@@ -138,6 +138,8 @@ services:
       - auth-service
       - account-service
       - transaction-service
+      - frontend   
+    restart: always   
 
   frontend:
     build: ./frontend
