@@ -112,8 +112,8 @@ services:
 
   transaction-service:
     build: ./backend/transaction-service
-    expose:
-      - "8083"
+    ports:
+    - "8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
       SPRING_DATASOURCE_USERNAME: bankuser
