@@ -127,6 +127,15 @@ services:
       postgres:
         condition: service_healthy
 
+  
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://13.233.173.154
+      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+
   api-gateway:
     image: nginx:alpine
     container_name: bank-gateway
@@ -139,15 +148,7 @@ services:
       - account-service
       - transaction-service
       - frontend   
-    restart: always   
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      VITE_API_BASE_URL: http://13.233.173.154
-      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    restart: always 
 
 volumes:
   postgres_data:
