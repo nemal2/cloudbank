@@ -10,19 +10,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: 13.232.251.68
-          username: ec2-user
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            cd /home/ec2-user/cloudbank
-            git pull
-            docker-compose down
-            docker-compose up -d --build
-            sleep 20
-            docker-compose up -d frontend
-            sleep 10
-            docker restart bank-gateway
-            echo "✅ Deployment complete"
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ap-south-1
+
+      - name: Get EC2 instances in ASG
+        id: get-instances
+        run: |
+          INSTANCE_IDS=$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names cloudbank-asg \
+            --query "AutoScalingGroups[0].Instances[*].InstanceId" \
+            --output text)
+
+          IPS=$(aws ec2 describe-instances \
+            --instance-ids $INSTANCE_IDS \
+            --query "Reservations[*].Instances[*].PublicIpAddress" \
+            --output text)
+
+          echo "ips=$IPS" >> $GITHUB_OUTPUT
+
+      - name: Deploy to all instances
+        run: |
+          for ip in ${{ steps.get-instances.outputs.ips }}
+          do
+            echo "Deploying to $ip"
+
+            ssh -o StrictHostKeyChecking=no -i <(echo "${{ secrets.EC2_KEY }}") ec2-user@$ip << 'EOF'
+              cd /home/ec2-user/cloudbank
+              git pull
+              docker-compose down
+              docker-compose up -d --build
+              sleep 20
+              docker-compose up -d frontend
+              sleep 10
+              docker restart bank-gateway
+            EOF
+
+          done
