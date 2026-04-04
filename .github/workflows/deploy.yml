@@ -40,13 +40,17 @@ jobs:
             echo "${{ secrets.EC2_KEY }}" > key.pem
             chmod 600 key.pem
             ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@$ip "
-              cd /home/ec2-user/cloudbank &&
-              git pull &&
-              docker-compose down &&
-              docker-compose up -d --build &&
-              sleep 20 &&
-              docker-compose up -d frontend &&
-              sleep 10 &&
-              docker restart bank-gateway
+              cd /home/ec2-user/cloudbank              
+              git pull              
+              docker-compose down              
+              docker-compose up -d --build              
+              sleep 20           
+              # ensure frontend is up
+              docker-compose up -d frontend              
+              sleep 10              
+              # restart gateway after frontend is ready
+              docker-compose restart api-gateway
+              docker ps
+              echo "done"
             "
           done
