@@ -31,22 +31,20 @@ jobs:
             --output text)
 
           echo "ips=$IPS" >> $GITHUB_OUTPUT
-
+          
       - name: Deploy to all instances
         run: |
           for ip in ${{ steps.get-instances.outputs.ips }}
           do
             echo "Deploying to $ip"
-
-            ssh -o StrictHostKeyChecking=no -i <(echo "${{ secrets.EC2_KEY }}") ec2-user@$ip << 'EOF'
-              cd /home/ec2-user/cloudbank
-              git pull
-              docker-compose down
-              docker-compose up -d --build
-              sleep 20
-              docker-compose up -d frontend
-              sleep 10
-              docker restart bank-gateway
+            ssh -o StrictHostKeyChecking=no ec2-user@$ip << EOF
+            cd /home/ec2-user/cloudbank
+            git pull
+            docker-compose down
+            docker-compose up -d --build
+            sleep 20
+            docker-compose up -d frontend
+            sleep 10
+            docker restart bank-gateway
             EOF
-
           done
