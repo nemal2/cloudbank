@@ -37,14 +37,14 @@ jobs:
           for ip in ${{ steps.get-instances.outputs.ips }}
           do
             echo "Deploying to $ip"
-            ssh -o StrictHostKeyChecking=no ec2-user@$ip << EOF
-            cd /home/ec2-user/cloudbank
-            git pull
-            docker-compose down
-            docker-compose up -d --build
-            sleep 20
-            docker-compose up -d frontend
-            sleep 10
-            docker restart bank-gateway
-            EOF
+            ssh -o StrictHostKeyChecking=no ec2-user@$ip "
+              cd /home/ec2-user/cloudbank &&
+              git pull &&
+              docker-compose down &&
+              docker-compose up -d --build &&
+              sleep 20 &&
+              docker-compose up -d frontend &&
+              sleep 10 &&
+              docker restart bank-gateway
+            "
           done
