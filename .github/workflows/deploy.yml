@@ -37,7 +37,9 @@ jobs:
           for ip in ${{ steps.get-instances.outputs.ips }}
           do
             echo "Deploying to $ip"
-            ssh -o StrictHostKeyChecking=no ec2-user@$ip "
+            echo "${{ secrets.EC2_KEY }}" > key.pem
+            chmod 600 key.pem
+            ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@$ip "
               cd /home/ec2-user/cloudbank &&
               git pull &&
               docker-compose down &&
