@@ -2,9 +2,9 @@ name: Banking System CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
-    branches: [main]
+    branches: [develop]
 
 env:
   AWS_REGION: us-east-1
