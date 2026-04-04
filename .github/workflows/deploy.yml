@@ -41,6 +41,8 @@ jobs:
             chmod 600 key.pem
             ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@$ip "
               cd /home/ec2-user/cloudbank              
+              export GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+              export GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
               git pull              
               docker-compose down              
               docker-compose up -d --build              
