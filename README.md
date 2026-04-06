@@ -210,20 +210,9 @@ Push to `main` branch → GitHub Actions pipeline:
 4. Updates ECS services with new image tags
 5. Waits for deployment stability
 
-See `.github/workflows/ci-cd.yml` for the full pipeline.
 
 ---
 
-## Team
-
-| Member | Responsibility |
-|---|---|
-| Member 1 | Auth service + Google OAuth + Security config |
-| Member 2 | Transaction service + ACID logic + Saga + Outbox |
-| Member 3 | Kafka setup + Notification service + Email templates |
-| Member 4 | Frontend (React) + Account service + S3 + Docker + CI/CD |
-
----
 
 ## Dataset / Demo Accounts
 
