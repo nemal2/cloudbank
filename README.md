@@ -36,17 +36,305 @@ secure authentication, asynchronous messaging, and modern deployment practices.
 └──────────────────────────────────────────────────┘
 ```
 
-### Services
+## Overview
+ 
+CloudBank is a production-grade, cloud-native banking platform demonstrating every major cloud-computing concept required by EC7205:
+ 
+| Concept | Implementation |
+|---|---|
+| Microservices Architecture | 4 independently deployable Spring Boot services |
+| Asynchronous Messaging | Apache Kafka with Transactional Outbox Pattern |
+| Event-Driven Design | Choreography-based Saga for distributed consistency |
+| Caching | Redis — balance cache, session store, JWT blacklist |
+| ACID Transactions | PostgreSQL with pessimistic locking for fund transfers |
+| Object Storage | AWS S3 / MinIO abstraction for profile photos |
+| Containerisation | Docker Compose (12 containers, health-checked startup) |
+| CI/CD | GitHub Actions → Amazon ECR → ECS Fargate |
+| Observability | Prometheus metrics + Grafana dashboards |
+| Security | Google OAuth 2.0 → JWT (HS256) → RBAC |
+
+**What users can do:**
+- Sign in with Google (OAuth 2.0)
+- Open savings or current accounts
+- Transfer funds between accounts with full ACID guarantees
+- Receive HTML email confirmations for every transaction
+- Upload profile photos stored in S3-compatible storage
+- View paginated transaction history with real-time balance updates
+
+### Microservices
+ 
 | Service | Port | Responsibility |
 |---|---|---|
-| auth-service | 8081 | Google OAuth, JWT issue/verify, Redis session |
-| account-service | 8082 | Account CRUD, S3 avatar upload, Redis balance cache |
-| transaction-service | 8083 | ACID transfers, Saga orchestrator, Outbox relay |
-| notification-service | 8084 | Kafka consumer, email via SMTP (Mailhog/SendGrid) |
-| api-gateway (Nginx) | 80 | Rate limiting, routing, CORS, SSL termination |
-| frontend | 3000 | React + Vite SPA |
+| **auth-service** | 8081 | Google OAuth 2.0 ID token verification, JWT issuance (HS256), Redis session, token blacklisting on logout |
+| **account-service** | 8082 | Account CRUD, balance enquiry with Redis caching (60s TTL), S3/MinIO profile photo upload, admin freeze/unfreeze |
+| **transaction-service** | 8083 | ACID fund transfers (pessimistic locking), Choreography Saga coordinator, Transactional Outbox relay, Kafka event publication |
+| **notification-service** | 8084 | Kafka consumer, styled HTML email dispatch via SMTP (Mailhog locally, SendGrid/SES in production) |
+| **api-gateway** | 80/443 | Nginx reverse proxy — rate limiting (10 req/min auth, 30 req/min API), CORS, JWT header forwarding, SSL termination |
+| **frontend** | 3000 | React + Vite SPA — dashboard, transfer wizard, transaction history, avatar upload, admin panel |
 
 ---
+
+## Choreography-based Saga Design
+
+<img width="650" height="620" alt="image" src="https://github.com/user-attachments/assets/8ff82c79-bb8d-4792-be65-face6affa87d" />
+
+
+
+
+### Communication Patterns
+ 
+**Synchronous (REST over HTTP)**
+All client-facing operations use REST. The API Gateway routes requests and forwards the validated JWT. Used for: login, account creation, balance lookup, initiating transfers, admin operations, and history queries. These operations require an immediate response.
+ 
+**Asynchronous (Apache Kafka + Transactional Outbox)**
+After a transaction completes, the transaction-service writes a Kafka payload to the `outbox` table *within the same database transaction*. The `OutboxRelay` component polls every second and publishes unpublished events to Kafka. The notification-service reacts independently. This fully decouples the notification path - a slow or unavailable mail server never delays a transfer.
+
+```
+Kafka Topics         Partitions   Purpose
+──────────────────────────────────────────────────────────
+txn.completed             3       Successful transfer/deposit
+txn.failed                3       Validation or system failure
+notification.send         1       Generic notification trigger
+audit.log                 1       Immutable audit trail
+```
+
+### Data Layer
+ 
+**PostgreSQL** - primary relational store for all persistent data. Chosen for ACID compliance, essential for financial data integrity. Tables: `users`, `accounts`, `transactions`, `outbox_events`, `saga_state`. HikariCP connection pool (10 connections per service).
+
+**Redis** - three independent namespaces on the same instance:
+ 
+| Key pattern | TTL | Set by | Read by | Purpose |
+|---|---|---|---|---|
+| `session:{userId}` | 24h | Auth | Auth | Email/profile cache, avoids DB on every JWT validation |
+| `balance:{accountId}` | 60s | Account | Account | Balance read cache, invalidated on write |
+| `blacklist:{token}` | token's remaining TTL | Auth | Auth | Logout - renders JWT invalid before natural expiry |
+ 
+**AWS S3 / MinIO** - object storage for profile photos. The `S3Service` reads `AWS_ENDPOINT`: if set, routes to local MinIO; if unset, uses real AWS S3. No code changes between environments. Returns pre-signed URLs (1hr validity) so the browser fetches photos directly from S3 - zero backend bandwidth for image serving.
+ 
+---
+
+## 🔑 Key Design Patterns
+ 
+### Choreography-Based Saga
+ 
+CloudBank uses a **choreography-based saga** - there is no central orchestrator. Each service reacts to Kafka events and acts autonomously. This contrasts with orchestration (where a central `SagaOrchestrator` issues commands and awaits replies).
+ 
+```
+Transfer Request Flow
+─────────────────────────────────────────────────────────────────────
+ 
+  Client ──POST /transfer──► Transaction Service
+                                     │
+                    ┌────────────────▼────────────────────────┐
+                    │         @Transactional (single commit)   │
+                    │                                          │
+                    │  1. PESSIMISTIC_WRITE lock both accounts │
+                    │  2. Validate: ACTIVE status + balance    │
+                    │  3. Debit fromAccount                    │
+                    │  4. Credit toAccount                     │
+                    │  5. INSERT transaction (COMPLETED)       │
+                    │  6. INSERT outbox_event (published=false)│
+                    └────────────────┬────────────────────────┘
+                                     │  commit
+                                     │
+                    ┌────────────────▼────────────────────────┐
+                    │         OutboxRelay (every 1s)           │
+                    │  Polls outbox WHERE published = false    │
+                    │  → kafkaTemplate.send("txn.completed")  │
+                    │  → marks published = true after ACK     │
+                    └────────────────┬────────────────────────┘
+                                     │  Kafka event
+                                     │
+                    ┌────────────────▼────────────────────────┐
+                    │       Notification Service               │
+                    │  Consumes txn.completed                  │
+                    │  → sendTransferSentEmail(sender)         │
+                    │  → sendTransferReceivedEmail(recipient)  │
+                    └─────────────────────────────────────────┘
+ 
+ 
+Failure / Compensation Path
+─────────────────────────────────────────────────────────────────────
+ 
+  Insufficient funds / frozen account
+       │
+       ▼
+  IllegalStateException thrown inside @Transactional
+       │
+       ▼
+  Full rollback — NO debit, NO credit, NO outbox row
+       │
+       ▼
+  HTTP 400 returned to client immediately
+       │
+       (if failure occurs AFTER commit but Kafka is down)
+       ▼
+  OutboxRelay retries until Kafka is available
+  → txn.failed consumed by Notification Service
+  → sendTransactionFailedEmail dispatched
+```
+ 
+**Why choreography?** Lower coupling — Transaction Service doesn't need to know Notification Service exists. Adding a new reaction (e.g. fraud detection, audit logging) requires only a new Kafka consumer, not changes to the transaction flow.
+ 
+### Transactional Outbox Pattern
+ 
+This pattern solves the **dual-write problem**: how to update the database and publish a Kafka event atomically when they are two separate systems.
+ 
+```
+❌  NAIVE (broken) approach:
+    transactionRepository.save(txn);        // DB write succeeds
+    kafkaTemplate.send("txn.completed");    // Kafka is down → event lost forever
+                                            // Money moved, no notification, ever
+ 
+✅  OUTBOX (safe) approach:
+    @Transactional {
+      transactionRepository.save(txn);      // DB write 1
+      outboxRepository.save(outboxEvent);   // DB write 2  ← same transaction
+    }
+    // OutboxRelay polls and retries until Kafka accepts the event
+    // at-least-once delivery guaranteed even across Kafka restarts
+```
+ 
+The `outbox_events` table acts as a durable queue. The relay thread provides **at-least-once delivery** — the notification service must tolerate duplicate events (idempotent consumers).
+ 
+> **Reference:** This pattern is described in detail in [Saga Orchestration for Microservices Using the Outbox Pattern — InfoQ](https://www.infoq.com/articles/saga-orchestration-outbox/) and implemented in the [saga-orchestration reference project](https://github.com/semotpan/saga-orchestration).
+ 
+### ACID Fund Transfers
+ 
+Every fund transfer acquires a `SELECT ... FOR UPDATE` (pessimistic write lock) on both account rows before reading any balance. This prevents the classic lost-update race condition:
+ 
+```
+Without locking (broken):                With PESSIMISTIC_WRITE (safe):
+──────────────────────────────────────   ──────────────────────────────
+Thread A reads Alice: $500               Thread A locks Alice + Bob rows
+Thread B reads Alice: $500               Thread B BLOCKS waiting for lock
+Thread A subtracts $400 → writes $100    Thread A: debit/credit/commit
+Thread B subtracts $400 → writes $100   Thread B: acquires lock, reads $100
+Alice now has -$300  ← CORRUPT           Thread B: "Insufficient funds" ← CORRECT
+```
+ 
+The lock is held for the entire `@Transactional` method duration. Transactions are kept short to minimise lock contention.
+ 
+### Redis Caching Strategy
+ 
+```
+GET /api/v1/accounts/{id}
+ 
+  ┌─────────────────────────────────────────┐
+  │  Check Redis: GET balance:{accountId}   │
+  └──────────────┬──────────────────────────┘
+                 │
+        ┌────────▼────────┐
+        │   Cache HIT?    │
+        └────────┬────────┘
+        YES ◄────┘    └────► NO
+         │                    │
+         ▼                    ▼
+  Return cached          Query PostgreSQL
+  balance (~2ms)         (~120ms)
+  source: "cache"              │
+                               ▼
+                        Write to Redis
+                        TTL = 60 seconds
+                               │
+                               ▼
+                        Return balance
+                        source: "db"
+ 
+  Cache invalidated on:
+    - Balance change (transfer, deposit)
+    - Account status change (freeze/unfreeze)
+```
+ 
+---
+ 
+## 🔒 Security Model
+ 
+```
+Request Lifecycle
+──────────────────────────────────────────────────────────────────────
+ 
+  Browser ──► Nginx (TLS termination, rate limit check)
+                    │
+                    ▼
+              JwtAuthFilter (every service, stateless)
+                    │
+                    ├── No Bearer header? ──► Continue as anonymous
+                    │
+                    ├── Invalid signature? ──► Continue as anonymous
+                    │                         (log debug, no 401)
+                    │
+                    └── Valid JWT ──► Set SecurityContext
+                                      principal = userId
+                                      authorities = ROLE_USER / ROLE_ADMIN
+                                          │
+                                          ▼
+                                    @PreAuthorize checks
+                                    (admin endpoints only)
+```
+ 
+| Layer | Mechanism | Detail |
+|---|---|---|
+| **Identity** | Google OAuth 2.0 | ID token verified server-side against Google's public keys |
+| **Token** | JWT HS256 | Contains `userId` (subject) + `role` claim; shared secret across all services |
+| **Session** | Redis | 24h TTL; `session:{userId}` maps to email without DB lookup |
+| **Logout** | JWT Blacklist | Token stored in Redis with remaining TTL; renders it invalid immediately |
+| **Rate limiting** | Nginx | 10 req/min on `/api/v1/auth/*`; 30 req/min on all other API paths; burst 5 |
+| **RBAC** | Spring Security | `hasRole("ADMIN")` on all `/api/v1/admin/**` endpoints |
+| **Input** | Jakarta Validation | `@NotNull`, `@DecimalMin`, `@Size` on all request DTOs |
+| **SQL injection** | JPA parameterised | All queries use `?` placeholders or JPQL named params |
+| **Secrets** | Environment variables | `.env` excluded from git; AWS Secrets Manager in production |
+| **Transport** | HTTPS | TLS at Nginx; HTTP Strict Transport Security header in production |
+ 
+**Important JWT design note:** Each service verifies the JWT signature locally using the shared `jwt.secret`. No network call to auth-service is made per request — this is pure stateless verification (HMAC-SHA256 in memory, ~0.1ms). The tradeoff: services do not check the Redis blacklist, so a logged-out token remains valid on Account/Transaction services until natural expiry. Acceptable for this use case; production systems may add a blacklist check or use short-lived tokens (15 min) with refresh tokens.
+ 
+---
+ 
+## 📈 Scalability & High Availability
+ 
+### Horizontal Scaling
+ 
+All services are **fully stateless** — no in-memory session, no local file state. Session data lives in Redis; files live in S3. Any replica can serve any request without affinity.
+ 
+```bash
+# Scale transaction-service to 3 replicas — zero config changes
+docker compose up --scale transaction-service=3 -d
+ 
+# Nginx automatically round-robins across all healthy instances
+docker ps | grep transaction-service
+```
+ 
+In production, ECS Fargate autoscaling adjusts replica count based on CPU/memory metrics from CloudWatch.
+ 
+### Kafka Partitioning
+ 
+```
+Topic             Partitions   Max parallel consumers   Use case
+────────────────────────────────────────────────────────────────────
+txn.completed          3            3                  Email on success
+txn.failed             3            3                  Email on failure
+notification.send      1            1                  Generic emails
+audit.log              1            1                  Ordered audit trail
+```
+ 
+Scale notification-service to 3 replicas to match `txn.completed` partition count and triple email throughput.
+ 
+### Database Connection Management
+ 
+```
+Service                HikariCP pool size
+──────────────────────────────────────────
+auth-service                 8
+account-service              8
+transaction-service         10 (higher — holds locks during transfers)
+```
+ 
+In production, RDS PostgreSQL with read replicas routes balance-history and account-listing queries to replicas, preserving write throughput on the primary. The Outbox Relay runs on the primary only.
+ 
+---
+
+
 
 ## Prerequisites
 
