@@ -108,7 +108,7 @@ services:
       AWS_ENDPOINT: http://minio:9000
       AWS_ACCESS_KEY: minioadmin
       AWS_SECRET_KEY: minioadmin
-      JWT_SECRET: ${JWT_SECRET:-cloudbank-ruhuna-ec7205-super-secret-key-2025-batch23}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
 
   transaction-service:
     build: ./backend/transaction-service
@@ -122,7 +122,7 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: redispass
-      JWT_SECRET: ${JWT_SECRET:-cloudbank-ruhuna-ec7205-super-secret-key-2025-batch23}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
     depends_on:
       postgres:
         condition: service_healthy
