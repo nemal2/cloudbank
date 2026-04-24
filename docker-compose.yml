@@ -77,6 +77,7 @@ services:
       - "8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
@@ -84,9 +85,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-   # depends_on:
-   #  postgres:
-   #    condition: service_healthy
+    depends_on:
       redis:
         condition: service_healthy
 
@@ -97,6 +96,7 @@ services:
       - "8082:8082"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
@@ -111,20 +111,17 @@ services:
   transaction-service:
     build: ./backend/transaction-service
     ports:
-    - "8083:8083"
+      - "8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: bank-kafka:29092
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: redispass
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
-   # depends_on:
-   #  postgres:
-   #    condition: service_healthy
 
-  
   frontend:
     build: ./frontend
     container_name: frontend
@@ -154,8 +151,8 @@ services:
       transaction-service:
         condition: service_started
       frontend:
-        condition: service_healthy 
-    restart: always 
+        condition: service_healthy
+    restart: always
 
 volumes:
   postgres_data:
