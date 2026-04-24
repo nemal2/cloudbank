@@ -5,14 +5,27 @@ spring:
   application:
     name: transaction-service
 
+  sql:
+    init:
+      continue-on-error: false
+
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bankdb}
-    username: ${SPRING_DATASOURCE_USERNAME:bankuser}
-    password: ${SPRING_DATASOURCE_PASSWORD:bankpass}
+    # url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bankdb}
+    # url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE:require}
+    # url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?ssl=true&sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+    # username: ${SPRING_DATASOURCE_USERNAME:bankuser}
+    username: ${DB_USER}
+    # password: ${SPRING_DATASOURCE_PASSWORD:bankpass}
+    password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
       connection-timeout: 30000
+      initialization-fail-timeout: 60000
+      keepalive-time: 30000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
 
   jpa:
     hibernate:
@@ -49,7 +62,7 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:supersecretjwtkey2024bankingsystem}
-  expiration: 86400000  # 24 hours
+  expiration: 86400000 # 24 hours
 
 management:
   endpoints:
