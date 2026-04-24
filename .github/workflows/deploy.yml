@@ -6,56 +6,8 @@ on:
       - main
 
 jobs:
-  # migrate-db:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Run schema migration against RDS
-  #       env:
-  #         PGPASSWORD: ${{ secrets.RDS_PASSWORD }}
-  #       run: |
-  #         psql -h ${{ secrets.RDS_HOST }} \
-  #              -U ${{ secrets.RDS_USER }} \
-  #              -d ${{ secrets.RDS_DB_NAME }} \
-  #              -f infra/sql/init.sql \
-  #              --set ON_ERROR_STOP=1
-
-  migrate-db:
-    name: Run Database Migration
-    runs-on: ubuntu-latest
-    env:
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-      - name: Run schema migration against RDS
-        env:
-          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
-        run: |
-          psql -h ${{ secrets.DB_HOST }} \
-               -p ${{ secrets.DB_PORT }} \
-               -U ${{ secrets.DB_USER }} \
-               -d ${{ secrets.DB_NAME }} \
-               -f infra/sql/init.sql \
-               --set ON_ERROR_STOP=1
-
   deploy:
-    needs: migrate-db
-    # needs: migrate-db  # (old)
     runs-on: ubuntu-latest
-    env:
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
     steps:
       - name: Configure AWS credentials
@@ -91,11 +43,6 @@ jobs:
               cd /home/ec2-user/cloudbank              
               export GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
               export GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-              export DB_HOST=${{ secrets.DB_HOST }}
-              export DB_PORT=${{ secrets.DB_PORT }}
-              export DB_NAME=${{ secrets.DB_NAME }}
-              export DB_USER=${{ secrets.DB_USER }}
-              export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
               git pull              
               docker-compose down              
               docker-compose up -d --build              
@@ -106,6 +53,6 @@ jobs:
               # restart gateway after frontend is ready
               docker-compose restart api-gateway
               docker ps
-              echo \"done\"
+              echo "done"
             "
           done

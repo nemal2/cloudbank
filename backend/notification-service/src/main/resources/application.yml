@@ -5,17 +5,6 @@ spring:
   application:
     name: notification-service
 
-  sql:
-    init:
-      continue-on-error: false
-
-    # No datasource needed for notification service (added for consistency)
-
-  datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
-
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:

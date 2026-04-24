@@ -22,13 +22,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget -qO- http://localhost:${SERVER_PORT:-8080}/actuator/health || exit 1
 
 EXPOSE 8080
-COPY src/main/resources/rds-ca-bundle.pem /app/resources/rds-ca-bundle.pem
-USER root
-RUN keytool -import -trustcacerts -alias rds-ca \
-  -file /app/resources/rds-ca-bundle.pem \
-  -keystore $JAVA_HOME/lib/security/cacerts \
-  -storepass changeit -noprompt
-USER bankapp
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=75.0", \

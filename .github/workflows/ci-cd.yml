@@ -15,28 +15,20 @@ jobs:
   test-backend:
     name: Test Backend Services
     runs-on: ubuntu-latest
-    # services:
-    #   postgres:
-    #     image: postgres:15-alpine
-    #     env:
-    #       POSTGRES_DB: bankdb_test
-    #       POSTGRES_USER: bankuser
-    #       POSTGRES_PASSWORD: bankpass
-    #     ports:
-    #       - 5432:5432
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
-    env:
-      # DB credentials — set in GitHub → Settings → Secrets
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      # DB_SSL_MODE: require
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: bankdb_test
+          POSTGRES_USER: bankuser
+          POSTGRES_PASSWORD: bankpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -44,25 +36,17 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
-          distribution: "temurin"
+          java-version: '17'
+          distribution: 'temurin'
           cache: maven
-
-      - name: Import RDS CA Certificate
-        run: |
-          sudo keytool -import -trustcacerts -alias rds-ca -file backend/transaction-service/src/main/resources/rds-ca-bundle.pem -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit -noprompt
 
       - name: Test Transaction Service
         working-directory: backend/transaction-service
-        run: |
-          # mvn test -Dspring.datasource.url=jdbc:postgresql://localhost:5432/bankdb_test
-          mvn test
+        run: mvn test -Dspring.datasource.url=jdbc:postgresql://localhost:5432/bankdb_test
 
       - name: Test Account Service
         working-directory: backend/account-service
-        run: |
-          # mvn test -Dspring.datasource.url=jdbc:postgresql://localhost:5432/bankdb_test
-          mvn test
+        run: mvn test -Dspring.datasource.url=jdbc:postgresql://localhost:5432/bankdb_test
 
       - name: Test Auth Service
         working-directory: backend/auth-service
@@ -75,8 +59,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
       - name: Install & test
         working-directory: frontend
@@ -91,12 +75,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-backend, test-frontend]
     if: github.ref == 'refs/heads/main'
-    env:
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -146,14 +124,6 @@ jobs:
     needs: build-and-push
     if: github.ref == 'refs/heads/main'
     environment: production
-    env:
-      # DB credentials — set in GitHub → Settings → Secrets
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      # DB_SSL_MODE: require
 
     steps:
       - uses: actions/checkout@v4
@@ -164,47 +134,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Inject DB env into ECS task definitions
-        run: |
-          for SERVICE in transaction-service account-service auth-service
-          do
-            TASK_DEF_ARN=$(aws ecs describe-services \
-              --cluster bank-cluster \
-              --services "$SERVICE" \
-              --query "services[0].taskDefinition" \
-              --output text)
-
-            aws ecs describe-task-definition \
-              --task-definition "$TASK_DEF_ARN" \
-              --query "taskDefinition" > task-def.json
-
-            jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-              | .containerDefinitions |= map(
-                  .environment = (
-                    ((.environment // []) | map(select(.name as $n | ["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD","DB_SSL_MODE"] | index($n) | not)))
-                    + [
-                        {"name":"DB_HOST","value":env.DB_HOST},
-                        {"name":"DB_PORT","value":env.DB_PORT},
-                        {"name":"DB_NAME","value":env.DB_NAME},
-                        {"name":"DB_USER","value":env.DB_USER},
-                        {"name":"DB_PASSWORD","value":env.DB_PASSWORD},
-                        {"name":"DB_SSL_MODE","value":env.DB_SSL_MODE}
-                      ]
-                  )
-                )' task-def.json > task-def-updated.json
-
-            NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-              --cli-input-json file://task-def-updated.json \
-              --query "taskDefinition.taskDefinitionArn" \
-              --output text)
-
-            aws ecs update-service \
-              --cluster bank-cluster \
-              --service "$SERVICE" \
-              --task-definition "$NEW_TASK_DEF_ARN" \
-              --force-new-deployment
-          done
 
       - name: Deploy transaction-service to ECS
         run: |

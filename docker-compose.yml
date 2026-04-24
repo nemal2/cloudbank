@@ -1,21 +1,21 @@
 services:
   # ─── Infrastructure ───────────────────────────────────────────────
-  # postgres:
-  #   image: postgres:15-alpine
-  #   environment:
-  #     POSTGRES_DB: bankdb
-  #     POSTGRES_USER: bankuser
-  #     POSTGRES_PASSWORD: bankpass
-  #   ports:
-  #     - "5434:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #     - ./infra/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U bankuser -d bankdb"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: bankdb
+      POSTGRES_USER: bankuser
+      POSTGRES_PASSWORD: bankpass
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bankuser -d bankdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -24,7 +24,7 @@ services:
       - "6379:6379"
     command: redis-server --requirepass redispass
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "redispass", "ping" ]
+      test: ["CMD", "redis-cli", "-a", "redispass", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,34 +70,15 @@ services:
     volumes:
       - minio_data:/data
 
-  # db-migrate:
-  #   image: postgres:15-alpine
-  #   environment:
-  #     PGPASSWORD: ${DB_PASSWORD}
-  #   command: >
-  #     psql
-  #     "host=${DB_HOST} port=${DB_PORT} dbname=${DB_NAME} user=${DB_USER} password=${DB_PASSWORD} sslmode=require"
-  #     -f /sql/init.sql
-  #   volumes:
-  #     - ./infra/sql/init.sql:/sql/init.sql:ro
-  #   restart: "no"
-
   # ─── Backend Services ─────────────────────────────────────────────
   auth-service:
     build: ./backend/auth-service
     ports:
       - "8081:8081"
     environment:
-      # SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
-      # SPRING_DATASOURCE_USERNAME: bankuser
-      # SPRING_DATASOURCE_PASSWORD: bankpass
-      # DB credentials are injected at runtime from environment, not from compose
-      # DB_HOST: ${DB_HOST}
-      # DB_PORT: ${DB_PORT}
-      # DB_NAME: ${DB_NAME}
-      # DB_USER: ${DB_USER}
-      # DB_PASSWORD: ${DB_PASSWORD}
-      # DB_SSL_MODE: ${DB_SSL_MODE}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: redispass
@@ -105,17 +86,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
-      # db-migrate:
-      #   condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:8081/actuator/health" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   account-service:
     build: ./backend/account-service
@@ -123,16 +97,9 @@ services:
     ports:
       - "8082:8082"
     environment:
-      # SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
-      # SPRING_DATASOURCE_USERNAME: bankuser
-      # SPRING_DATASOURCE_PASSWORD: bankpass
-      # DB credentials are injected at runtime from environment, not from compose
-      # DB_HOST: ${DB_HOST}
-      # DB_PORT: ${DB_PORT}
-      # DB_NAME: ${DB_NAME}
-      # DB_USER: ${DB_USER}
-      # DB_PASSWORD: ${DB_PASSWORD}
-      # DB_SSL_MODE: ${DB_SSL_MODE}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: redispass
@@ -142,52 +109,35 @@ services:
       AWS_ACCESS_KEY: minioadmin
       AWS_SECRET_KEY: minioadmin
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
-    # depends_on:
-    #   db-migrate:
-    #     condition: service_completed_successfully
 
   transaction-service:
     build: ./backend/transaction-service
     ports:
-      - "8083:8083"
+    - "8083:8083"
     environment:
-      # SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
-      # SPRING_DATASOURCE_USERNAME: bankuser
-      # SPRING_DATASOURCE_PASSWORD: bankpass
-      # DB credentials are injected at runtime from environment, not from compose
-      # DB_HOST: ${DB_HOST}
-      # DB_PORT: ${DB_PORT}
-      # DB_NAME: ${DB_NAME}
-      # DB_USER: ${DB_USER}
-      # DB_PASSWORD: ${DB_PASSWORD}
-      # DB_SSL_MODE: ${DB_SSL_MODE}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bankdb
+      SPRING_DATASOURCE_USERNAME: bankuser
+      SPRING_DATASOURCE_PASSWORD: bankpass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: bank-kafka:29092
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: redispass
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey2024bankingsystem}
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-    # depends_on:
-    #   db-migrate:
-    #     condition: service_completed_successfully
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
 
+  
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    build: ./frontend
     container_name: frontend
     ports:
       - "3000:3000"
     environment:
       VITE_API_BASE_URL: http://13.233.173.154
+      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost" ]
+      test: ["CMD", "wget", "-qO-", "http://localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -201,15 +151,15 @@ services:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       auth-service:
-        condition: service_healthy
+        condition: service_started
       account-service:
         condition: service_started
       transaction-service:
         condition: service_started
       frontend:
-        condition: service_healthy
-    restart: always
+        condition: service_healthy 
+    restart: always 
 
 volumes:
-  # postgres_data:
+  postgres_data:
   minio_data:
