@@ -50,3 +50,7 @@ logging:
   level:
     org.springframework.security: DEBUG
     com.bank: DEBUG
+
+bank:
+  account:
+    starter-balance: 15.00
