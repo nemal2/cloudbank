@@ -5,6 +5,7 @@ import com.bank.service.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -25,13 +26,13 @@ public class AccountController {
     private final S3Service      s3Service;
 
     private UUID getCurrentUserId() {
-    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-    if (auth == null || !auth.isAuthenticated() || 
-        auth.getPrincipal().toString().equals("anonymousUser")) {
-        throw new RuntimeException("Not authenticated");
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() ||
+                auth.getPrincipal().toString().equals("anonymousUser")) {
+            throw new RuntimeException("Not authenticated");
+        }
+        return UUID.fromString(auth.getPrincipal().toString());
     }
-    return UUID.fromString(auth.getPrincipal().toString());
-}
 
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> listAccounts() {
@@ -54,22 +55,26 @@ public class AccountController {
     public ResponseEntity<Map<String, String>> uploadAvatar(
             @RequestParam("file") MultipartFile file) {
         try {
-            String key = "avatars/" + getCurrentUserId() + "/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
+            String key = "avatars/" + getCurrentUserId() + "/"
+                       + UUID.randomUUID() + "-" + file.getOriginalFilename();
             String url = s3Service.upload(key, file.getInputStream(), file.getContentType());
             accountService.updateAvatarUrl(getCurrentUserId(), url);
             return ResponseEntity.ok(Map.of("url", url, "message", "Profile photo updated"));
         } catch (Exception e) {
             log.error("Avatar upload failed: {}", e.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Upload failed: " + e.getMessage()));
+            return ResponseEntity.status(500)
+                .body(Map.of("error", "Upload failed: " + e.getMessage()));
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/admin/accounts/{id}/freeze")
     public ResponseEntity<Map<String, String>> freeze(@PathVariable UUID id) {
         accountService.setAccountStatus(id, "FROZEN");
         return ResponseEntity.ok(Map.of("message", "Account frozen"));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/admin/accounts/{id}/unfreeze")
     public ResponseEntity<Map<String, String>> unfreeze(@PathVariable UUID id) {
         accountService.setAccountStatus(id, "ACTIVE");
