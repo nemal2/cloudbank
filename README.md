@@ -49,7 +49,7 @@ CloudBank is a production-grade, cloud-native banking platform demonstrating eve
 | ACID Transactions | PostgreSQL with pessimistic locking for fund transfers |
 | Object Storage | AWS S3 / MinIO abstraction for profile photos |
 | Containerisation | Docker Compose (12 containers, health-checked startup) |
-| CI/CD | GitHub Actions → Amazon ECR → ECS Fargate |
+| CI/CD | GitHub Actions → Amazon EC2|
 | Observability | Prometheus metrics + Grafana dashboards |
 | Security | Google OAuth 2.0 → JWT (HS256) → RBAC |
 
@@ -181,12 +181,7 @@ Failure / Compensation Path
  
 This pattern solves the **dual-write problem**: how to update the database and publish a Kafka event atomically when they are two separate systems.
  
-```
-❌  NAIVE (broken) approach:
-    transactionRepository.save(txn);        // DB write succeeds
-    kafkaTemplate.send("txn.completed");    // Kafka is down → event lost forever
-                                            // Money moved, no notification, ever
- 
+``` 
 ✅  OUTBOX (safe) approach:
     @Transactional {
       transactionRepository.save(txn);      // DB write 1
@@ -305,7 +300,7 @@ docker compose up --scale transaction-service=3 -d
 docker ps | grep transaction-service
 ```
  
-In production, ECS Fargate autoscaling adjusts replica count based on CPU/memory metrics from CloudWatch.
+In production, ALB autoscaling adjusts replica count based on CPU/memory metrics from CloudWatch.
  
 ### Kafka Partitioning
  
@@ -385,7 +380,6 @@ Wait for all services to be healthy (~60 seconds on first run).
 | Mailhog (email UI) | http://localhost:8025 |
 | MinIO Console (S3) | http://localhost:9001 (minioadmin / minioadmin) |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3001 (admin / admin) |
 | Kafka | localhost:9092 |
 
 ---
@@ -486,16 +480,15 @@ After a transfer completes, the service writes a Kafka event to an `outbox` tabl
 
 ### Pre-requisites
 - AWS CLI configured
-- ECR repositories created
-- ECS cluster `bank-cluster` with services defined
+- EC2 instance created
 - RDS PostgreSQL + ElastiCache Redis + MSK (Kafka) provisioned
 
 ### Deploy
 Push to `main` branch → GitHub Actions pipeline:
 1. Runs tests
 2. Builds Docker images
-3. Pushes to ECR
-4. Updates ECS services with new image tags
+3. Pushes to Docker Hub
+4. Updates services with new image tags
 5. Waits for deployment stability
 
 
