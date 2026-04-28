@@ -1,4 +1,4 @@
-<img width="1400" height="271" alt="image" src="https://github.com/user-attachments/assets/100616a4-58c0-4382-bd55-aa941586a9c9" /># CloudBank — Mini Banking System
+# CloudBank — Mini Banking System
 **University of Ruhuna · Faculty of Engineering · EC7205 Cloud Computing · Assignment 2**
 
 A cloud-native, microservices-based banking system demonstrating scalability, high availability,
