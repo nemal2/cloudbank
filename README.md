@@ -1,4 +1,4 @@
-# CloudBank — Mini Banking System
+<img width="1400" height="271" alt="image" src="https://github.com/user-attachments/assets/100616a4-58c0-4382-bd55-aa941586a9c9" /># CloudBank — Mini Banking System
 **University of Ruhuna · Faculty of Engineering · EC7205 Cloud Computing · Assignment 2**
 
 A cloud-native, microservices-based banking system demonstrating scalability, high availability,
@@ -50,7 +50,7 @@ CloudBank is a production-grade, cloud-native banking platform demonstrating eve
 | Object Storage | AWS S3 / MinIO abstraction for profile photos |
 | Containerisation | Docker Compose (12 containers, health-checked startup) |
 | CI/CD | GitHub Actions → Amazon EC2|
-| Observability | Prometheus metrics + Grafana dashboards |
+| Observability | Amazon CloudWatch  |
 | Security | Google OAuth 2.0 → JWT (HS256) → RBAC |
 
 **What users can do:**
@@ -379,7 +379,6 @@ Wait for all services to be healthy (~60 seconds on first run).
 | API Gateway | http://localhost:80 |
 | Mailhog (email UI) | http://localhost:8025 |
 | MinIO Console (S3) | http://localhost:9001 (minioadmin / minioadmin) |
-| Prometheus | http://localhost:9090 |
 | Kafka | localhost:9092 |
 
 ---
@@ -399,7 +398,7 @@ Nginx automatically load-balances across all three instances. Sessions are state
 ### Backend
 ```bash
 # Start infrastructure only
-docker compose up postgres redis kafka zookeeper mailhog minio -d
+docker compose up postgres redis kafka mailhog minio -d
 
 # Run a service
 cd backend/transaction-service
